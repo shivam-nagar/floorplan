@@ -1,0 +1,202 @@
+<html>
+<body>
+<canvas width=922px height=428px id="floormap" style="border:1px solid #000000;">
+</canvas>
+<script src="./graph.js"></script>
+<script>
+function getCartesianDist(x1,y1,x2,y2) {
+	return Math.sqrt(Math.abs(x1-x2)*Math.abs(x1-x2) + Math.abs(y1-y2)*Math.abs(y1-y2));
+}
+var canvas = document.getElementById("floormap");
+var ctx = canvas.getContext("2d");
+
+// Make sure the image is loaded first otherwise nothing will draw.
+var clusters = [
+	{x:10,y:10,h:110,w:90,name:"Cluster1",type:"meeting"},
+	{x:115,y:310,h:100,w:75,name:"Cluster2",type:"cubicle"},
+	{x:840,y:15,h:70,w:75,name:"Cluster3",type:"cubicle"},
+	{x:280,y:230,h:80,w:75,name:"stairs1",type:"stairs"},
+	{x:570,y:230,h:80,w:75,name:"stairs2",type:"stairs"},
+	{x:400,y:250,h:60,w:130,name:"Elevator",type:"elevator"}
+];
+var nodes = [
+	{x:110,y:130,name:"0"}, // Cluster1 
+	{x:380,y:130,name:"1"}, // lobby 1
+	{x:465,y:130,name:"2"}, // lobby 2
+	{x:540,y:130,name:"3"}, // lobby 3
+	{x:820,y:130,name:"4"}, // Stairs 1
+	{x:110,y:290,name:"5"}, // Stairs 2
+	{x:380,y:230,name:"6"}, // Elevator
+	{x:465,y:230,name:"7"}, // Elevator
+	{x:540,y:230,name:"8"}
+];
+var pathNodes = [
+	{p:"0",q:"5"},
+	{p:"0",q:"1"},
+	{p:"2",q:"1"},
+	{p:"6",q:"1"},
+	{p:"6",q:"7"},
+	{p:"8",q:"7"},
+	{p:"2",q:"7"},
+	{p:"2",q:"3"},
+	{p:"8",q:"3"},
+	{p:"3",q:"4"}
+];
+var s,d;
+function findNearestNode(x,y) {
+	nearest = Number.POSITIVE_INFINITY;
+	idx = 0;
+	for(i=0;i<nodes.length;i++){
+		d=getCartesianDist(x,y,nodes[i].x,nodes[i].y)
+		if(nearest>d){
+			nearest = d;
+			idx = i;
+		}
+	}
+	return nodes[idx]
+}
+
+function createPathArray(path) {
+	var pathArray = [];
+	for(i=0;i<path.length;i++){
+		for(j=0;j<nodes.length;j++){
+			if(path[i] == nodes[j].name) {
+				pathArray.push(nodes[j]);
+			}
+		}
+	}
+	return pathArray;
+}
+
+function drawPath(pathArray){
+	ctx.beginPath();
+	ctx.lineWidth=5;
+
+    ctx.moveTo(pathArray[0].x,pathArray[0].y);
+	for(i=1;i<pathArray.length;i++){
+    	ctx.lineTo(pathArray[i].x,pathArray[i].y);
+	}
+	ctx.stroke();
+    ctx.closePath();
+}
+function drawL(x,y,node){
+	ctx.beginPath();
+	ctx.moveTo(x,y);
+	if(x>node.x && y>node.y){
+		ctx.lineTo(x,node.y);
+	}
+	if(x<node.x && y>node.y){
+		ctx.lineTo(node.x,y);
+	}
+	if(x<node.x && y<node.y){
+		ctx.lineTo(x,node.y);
+	}
+	if(x>node.x && y<node.y){
+		ctx.lineTo(x,node.y);
+	}
+	ctx.lineTo(node.x,node.y);
+	ctx.stroke();
+    ctx.closePath();
+}
+function findPath(src,dst){
+	var srcx, srcy;
+	var dstx, dsty;
+	for(i=0;i<clusters.length;i++){
+		c = clusters[i];
+		if(c.name == src) {
+			srcx = c.x + c.w/2;
+			srcy = c.y + c.h/2;
+		}
+		if(c.name == dst) {
+			dstx = c.x + c.w/2;
+			dsty = c.y + c.h/2;
+		}
+	}
+
+	console.log("SRC:"+src+":("+srcx+","+srcy+"), DST:"+dst+":("+dstx+","+dsty+")");
+
+	s = findNearestNode(srcx,srcy);
+	d = findNearestNode(dstx,dsty);
+	graph = new Graph();
+	srcNode=graph.addNode("src");
+	dstNode=graph.addNode("dst");
+
+	graphNode = [];
+	for(i=0;i<nodes.length;i++){
+		graphNode[i] = graph.addNode(String(nodes[i].name));
+	}
+	for(i=0;i<nodes.length;i++){
+		for(j=0;j<nodes.length;j++){
+			for(k=0;k<pathNodes.length;k++){
+				if((nodes[i].name == pathNodes[k].p && nodes[j].name == pathNodes[k].q) || 
+				(nodes[i].name == pathNodes[k].q && nodes[j].name == pathNodes[k].p)) {
+					dist = getCartesianDist(nodes[i].x,nodes[i].y,nodes[j].x,nodes[j].y);
+					graphNode[i].addEdge(graphNode[j],dist);
+					graphNode[j].addEdge(graphNode[i],dist);
+				}
+			}
+		}
+	}
+	for(i=0;i<nodes.length;i++){
+		if(s.name == nodes[i].name) {
+			srcNode.addEdge(graphNode[i],getCartesianDist(srcx,srcy,nodes[i].x,nodes[i].y));
+			graphNode[i].addEdge(srcNode,getCartesianDist(srcx,srcy,nodes[i].x,nodes[i].y));
+		}
+		if(d.name == nodes[i].name) {
+			graphNode[i].addEdge(dstNode,getCartesianDist(dstx,dsty,nodes[i].x,nodes[i].y));
+			dstNode.addEdge(graphNode[i],getCartesianDist(dstx,dsty,nodes[i].x,nodes[i].y));
+		}
+	}
+
+	var path = dijkstra(graph,srcNode,dstNode);
+	//path.push(d.name);
+	//path = ["5","0","1","2","3","8"]
+	pathArray = createPathArray(path);
+	drawPath(pathArray);
+	drawL(srcx,srcy,s);
+	drawL(dstx,dsty,d);
+	console.log(path)
+}
+var background;
+function plot(src,dst) {
+	ctx.clearRect(0,0,canvas.width,canvas.height);
+	ctx.drawImage(background,0,0);   
+    for(var i=0;i<clusters.length;i++){
+	    ctx.font = "10pt sans-serif";
+		ctx.fillStyle = "#BADA55";
+		ctx.globalAlpha=0.6;
+
+		var c = clusters[i];
+		ctx.fillRect(c.x,c.y,c.w,c.h);
+		ctx.fillStyle = "red";
+		ctx.globalAlpha=0.8;
+		ctx.fillText(c.name, c.x+5, c.y+15);
+	}/*
+    for(var i=0;i<nodes.length;i++){
+		ctx.fillStyle = "BLUE";
+		ctx.globalAlpha=0.8;
+		var c = nodes[i];
+		ctx.fillRect(c.x,c.y,10,10);
+		ctx.fillStyle = "red";
+		ctx.globalAlpha=0.8;
+		ctx.fillText(c.name, c.x+5, c.y+5);
+	}*/
+	findPath(src,dst);
+	//findPath("stairs2","Cluster3");
+	//findPath("stairs1","Cluster2");
+}
+
+function plotWrapper(src,dst){
+	background = new Image();
+	background.src = "./bkimg.jpg";
+	background.onload = function(){ plot(src, dst) };
+}
+//background.onload = plot;
+window.setInterval(function(){
+	dst = clusters[Math.floor((Math.random() * 5) + 0)].name;
+	src = clusters[Math.floor((Math.random() * 5) + 0)].name;
+	plotWrapper(src,dst);
+},1000);
+</script>
+</body>
+</html>
